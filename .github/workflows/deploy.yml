@@ -53,9 +53,8 @@ jobs:
           fi
       - run: npm ci --no-audit --no-fund
       - run: npm run build
+      # Pages is enabled manually in Settings. Do not attempt an admin-only site creation.
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
