@@ -7,7 +7,7 @@ import GlassPill from '../components/GlassPill';
 import DisplacementTransition from '../components/DisplacementTransition';
 
 // метка версии сборки — видна в верхней полосе ТВ, чтобы понимать: свежая версия или кэш
-const APP_VERSION = 'SushiOrdo-2.0';
+const APP_VERSION = 'SushiOrdo-2.1';
 
 const variants = {
   fade: { initial: { opacity: 0, scale: 1.04, filter: 'blur(6px)' }, animate: { opacity: 1, scale: 1, filter: 'blur(0px)' }, exit: { opacity: 0, scale: 0.98, filter: 'blur(6px)' } },
@@ -45,8 +45,16 @@ export default function TvPlayer() {
   const timerRef = useRef(null);
   const screen = store.screens.find((s) => s.id === id);
   const slides = screen?.slides?.length ? screen.slides : [];
+  const live = useRef(null);
+  live.current = { id, slides, idx, disp };
+  const slideId = slides[Math.min(idx, Math.max(0, slides.length - 1))]?.id;
+  const slideDuration = slides[Math.min(idx, Math.max(0, slides.length - 1))]?.duration || 7;
+  const canRotate = slides.length > 1;
 
   const goNext = useCallback((nextIdx) => {
+    const { slides, idx } = live.current;
+    if (!slides.length) return;
+    nextIdx = ((nextIdx % slides.length) + slides.length) % slides.length;
     const cur = slides[idx];
     const nxt = slides[nextIdx];
     if (!cur || !nxt) return setIdx(nextIdx);
@@ -58,12 +66,13 @@ export default function TvPlayer() {
     } else {
       setIdx(nextIdx);
     }
-  }, [slides, idx]);
+  }, []);
 
   // облако: подтягиваем свежие данные сами (кэш браузера сводит трафик к дешёвым проверкам)
   const lastCloud = useRef('');
   const polling = useRef(false);
   const [syncError, setSyncError] = useState('');
+  const [syncedAt, setSyncedAt] = useState('');
   const pollCloud = useCallback(async () => {
     if (polling.current) return;
     polling.current = true;
@@ -71,10 +80,18 @@ export default function TvPlayer() {
       const cloud = await fetchCloud(15000, true, false);
       setSyncError('');
       if (cloud.revision === lastCloud.current) return;
+      const before = live.current;
+      const currentId = before.slides[before.idx]?.id;
+      const nextSlides = cloud.data.screens.find(s => s.id === before.id)?.slides || [];
+      const preserved = nextSlides.findIndex(s => s.id === currentId);
+      const nextIndex = preserved >= 0 ? preserved : Math.min(before.idx, Math.max(0, nextSlides.length - 1));
       lastCloud.current = cloud.revision;
+      setSyncedAt(cloud.updatedAt);
       setStore(cloud.data);
       cacheStore(cloud.data);
-      setIdx(0); setDisp(null);
+      setIdx(nextIndex);
+      // A publication updates content, not the slideshow's deadline. Only cancel an active warp.
+      if (before.disp) setDisp(null);
     } catch (e) { setSyncError('Нет связи с меню. Последняя загруженная версия остаётся на экране.'); }
     finally { polling.current = false; }
   }, []);
@@ -88,16 +105,17 @@ export default function TvPlayer() {
   }, [pollCloud]);
   useEffect(() => { setIdx(0); setDisp(null); }, [id, screen?.id]);
 
-  // autoplay
+  // Content publications must not restart the current slide's timer.
+  // Navigation reads the latest playlist through a ref, not a stale snapshot.
   useEffect(() => {
-    if (!slides.length || disp) return; // pause while displacement plays
-    const dur = (slides[idx]?.duration || 7) * 1000;
+    if (!canRotate || disp) return;
+    const dur = Math.max(2, Number(slideDuration) || 7) * 1000;
     timerRef.current = setTimeout(() => {
-      const next = (idx + 1) % slides.length;
-      goNext(next);
+      const current = live.current;
+      goNext((current.idx + 1) % current.slides.length);
     }, dur);
     return () => clearTimeout(timerRef.current);
-  }, [idx, slides, disp, goNext]);
+  }, [id, slideId, slideDuration, canRotate, Boolean(disp), goNext]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showChrome, setShowChrome] = useState(true);
@@ -145,9 +163,10 @@ export default function TvPlayer() {
   return (
     <div ref={containerRef} className="w-screen h-screen bg-black overflow-hidden relative select-none">
       <div className={`absolute top-0 inset-x-0 z-20 flex items-center justify-between px-4 py-2 bg-black/55 backdrop-blur text-white/90 text-xs tracking-wide transition-opacity duration-500 ${isFullscreen && !showChrome ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
-        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с • v{APP_VERSION} {disp ? '• liquid warp…' : ''}</span>
+        <span>{screen.name} • {idx + 1} / {slides.length} • {current.transition} • {current.duration}с • v{APP_VERSION} {disp ? '• liquid warp…' : ''} {syncedAt ? '• меню ' + new Date(syncedAt).toLocaleTimeString('ru-RU') : ''}</span>
         <span className="flex items-center gap-2">
           <span className="opacity-60 hidden sm:inline">← → листать • F фуллскрин</span>
+          <button onClick={pollCloud} className="px-3 py-1.5 rounded-full bg-zinc-700 text-white">Обновить меню</button>
           <button onClick={toggleFullscreen} className="px-3 py-1.5 rounded-full bg-white text-black font-bold hover:bg-zinc-100">{isFullscreen ? 'Выйти' : '⛶ На весь экран'}</button>
         </span>
       </div>
@@ -185,7 +204,7 @@ export default function TvPlayer() {
 
       {!isFullscreen && !disp && <button onClick={toggleFullscreen} className="absolute inset-0 z-10 cursor-pointer opacity-0" aria-label="tap for fullscreen" />}
       <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex gap-2 transition-opacity ${isFullscreen && !showChrome ? 'opacity-0' : 'opacity-100'}`}>
-        {slides.map((_, i) => <button key={i} onClick={() => !disp && goNext(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />)}
+        {slides.map((_, i) => <button key={i} aria-label={'Лист ' + (i + 1)} aria-current={i === idx ? 'true' : undefined} onClick={() => !disp && goNext(i)} className={`h-1.5 rounded-full transition-all ${i === idx ? 'w-8 bg-white' : 'w-5 bg-white/35'}`} />)}
       </div>
       {syncError && <div role="status" className="absolute bottom-1 left-2 z-30 text-xs text-amber-300 bg-black/70 px-2">{syncError}</div>}
     </div>
