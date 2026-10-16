@@ -1,0 +1,93 @@
+{
+  "appId": "sushi-ordo-v2",
+  "revision": "sushi-ordo-initial-v2",
+  "updatedAt": "2026-10-16T15:00:00Z",
+  "data": {
+    "screens": [
+      {
+        "id": "tv1",
+        "name": "Суши ORDO — ТВ 1",
+        "slides": [
+          {
+            "id": "ordo-slide-1",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "tv2",
+        "name": "Суши ORDO — ТВ 2",
+        "slides": [
+          {
+            "id": "ordo-slide-2",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "tv3",
+        "name": "Суши ORDO — ТВ 3",
+        "slides": [
+          {
+            "id": "ordo-slide-3",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "tv4",
+        "name": "Суши ORDO — ТВ 4",
+        "slides": [
+          {
+            "id": "ordo-slide-4",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "tv5",
+        "name": "Суши ORDO — ТВ 5",
+        "slides": [
+          {
+            "id": "ordo-slide-5",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      },
+      {
+        "id": "tv6",
+        "name": "Суши ORDO — ТВ 6",
+        "slides": [
+          {
+            "id": "ordo-slide-6",
+            "type": "image",
+            "bg": "/SushiOrdo/placeholder.svg",
+            "duration": 10,
+            "transition": "fade",
+            "items": []
+          }
+        ]
+      }
+    ]
+  }
+}

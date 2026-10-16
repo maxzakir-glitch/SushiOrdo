@@ -1,0 +1,63 @@
+name: Setup and deploy
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+concurrency:
+  group: sushi-ordo-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: ''
+      - name: Import pinned source into this repository once
+        run: |
+          node scripts/setup-copy.mjs
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .
+          if ! git diff --cached --quiet; then
+            git commit -m 'Materialize independent SushiOrdo source and fixes'
+            git push origin HEAD:main
+          fi
+      - name: Initialize data branch only when absent
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages > /dev/null; then
+            echo 'Existing menu preserved: gh-pages is never overwritten by deploy.'
+          else
+            cp public/data/menu.json "$RUNNER_TEMP/sushi-menu.json"
+            git worktree add --detach "$RUNNER_TEMP/sushi-data"
+            cd "$RUNNER_TEMP/sushi-data"
+            git checkout --orphan gh-pages
+            git rm -rf .
+            mkdir -p data
+            cp "$RUNNER_TEMP/sushi-menu.json" data/menu.json
+            touch .nojekyll
+            git add data/menu.json .nojekyll
+            git commit -m 'Initialize isolated SushiOrdo publication for six TVs'
+            git push origin HEAD:gh-pages
+          fi
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - uses: actions/deploy-pages@v4
+        id: deployment
