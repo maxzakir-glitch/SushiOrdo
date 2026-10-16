@@ -17,7 +17,18 @@ export default function Admin() {
   const [activeScreenId, setActiveScreenId] = useState('tv1');
   const [activeSlideId, setActiveSlideId] = useState('ordo-slide-1');
   const [selectedId, setSelectedId] = useState(null);
-  const [, setShowCloudPanel] = useState(false);
+  const [showCloudPanel, setShowCloudPanel] = useState(false);
+  useEffect(() => {
+    if (!showCloudPanel) return;
+    document.getElementById('publish-token')?.focus();
+    const close = e => { if (e.key === 'Escape') setShowCloudPanel(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [showCloudPanel]);
+  async function saveToTv() {
+    if (!hasToken()) { setShowCloudPanel(true); return; }
+    await doPush();
+  }
   useEffect(() => {
     const sc = store.screens.find(s => s.id === activeScreenId) || store.screens[0];
     if (!sc) return;
@@ -159,9 +170,39 @@ export default function Admin() {
 
   return (
     <div className="min-h-screen bg-[#0f0f10] text-zinc-100 flex flex-col">
+      {showCloudPanel && (
+        <div className="fixed inset-0 z-50 bg-black/80 p-4 grid place-items-center">
+          <section role="dialog" aria-modal="true" aria-labelledby="publish-title" className="w-full max-w-xl max-h-[90vh] overflow-auto rounded-2xl border border-zinc-600 bg-zinc-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex justify-between items-center gap-4">
+              <h2 id="publish-title" className="text-xl font-bold">Подключить публикацию на телевизоры</h2>
+              <button onClick={() => setShowCloudPanel(false)} aria-label="Закрыть подключение" className="px-3 py-2 rounded bg-zinc-700">✕</button>
+            </div>
+            <p className="text-amber-200">Без доступа к записи кнопка не может отправить меню на ТВ. Подключение GitHub в чате не подключает браузер админки.</p>
+            <p>Нужно один раз разрешить запись только в <b>maxzakir-glitch/SushiOrdo</b>. Исходному кафе доступ не нужен.</p>
+            <ol className="list-decimal pl-5 space-y-2 text-sm text-zinc-300">
+              <li><a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener noreferrer" className="underline text-sky-300">Создать GitHub-токен</a> под аккаунтом maxzakir-glitch.</li>
+              <li>Repository access → Only select repositories → SushiOrdo. Repository permissions → Contents → Read and write.</li>
+              <li>Создать токен и вставить его в поле ниже. Не отправлять в чат, не добавлять в ссылку.</li>
+            </ol>
+            <label className="block text-sm">GitHub-токен для публикации
+              <input id="publish-token" type="password" autoComplete="off" value={tokenInput} onChange={e => setTokenInput(e.target.value)} className="mt-2 w-full p-3 rounded-xl bg-black border border-zinc-600" />
+            </label>
+            <button onClick={connectToken} disabled={!tokenInput.trim() || !ready || cloud.s === 'push'} className="w-full px-4 py-3 rounded-xl bg-emerald-500 text-black font-bold disabled:opacity-40">Подключить и отправить черновик на ТВ</button>
+            {cloud.s === 'push' && <p role="status">Отправляю меню. Не закрывайте страницу…</p>}
+            {cloud.s === 'err' && <p role="alert" className="text-red-300 break-words">Не опубликовано: {cloud.msg}</p>}
+            {connectMsg && <p role="status" className="break-words">{connectMsg}</p>}
+            <p className="text-xs text-zinc-400">Черновик не удаляется при закрытии этого окна. Если подключение уже есть, но выдаёт ошибку, здесь можно заменить токен.</p>
+          </section>
+        </div>
+      )}
+      {ready && !hasToken() && <div role="status" className="p-4 bg-amber-950 text-amber-100 border-b border-amber-600 flex flex-wrap items-center justify-between gap-3">
+        <span><b>На ТВ изменения пока не отправляются.</b> Подключите публикацию один раз. До этого правки остаются только на этом устройстве.</span>
+        <button onClick={() => setShowCloudPanel(true)} className="px-4 py-2 rounded-lg bg-amber-200 text-black font-bold">Подключить публикацию</button>
+      </div>}
+
       {cloudNewer && (
         <div className="bg-amber-400 text-zinc-900 px-6 py-2.5 text-sm font-semibold flex flex-wrap items-center justify-between gap-2">
-          <span>⚠ В облаке данные новее ({fmtTime(cloudNewer)}). Если правок в этой вкладке не делал — забери их, иначе следующее сохранение перезапишет облако старой копией.</span>
+          <span>⚠ Облачная версия отличается ({fmtTime(cloudNewer)}). Автоматическая перезапись заблокирована. Сначала скачайте резервную копию черновика; загрузка облачной версии заменит ваши неопубликованные правки.</span>
           <button onClick={async () => { if (!confirm('Забрать данные из облака? Несохранённые правки этой вкладки пропадут.')) return; await manualPull(); setCloudNewer(''); }} className="px-3 py-1 rounded-lg bg-zinc-900 text-white font-bold">Забрать из облака</button>
         </div>
       )}
@@ -448,8 +489,18 @@ export default function Admin() {
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-4 flex items-center justify-between gap-4">
-                <div className="text-sm text-zinc-400">Сохраняется автоматически: в этом браузере сразу, в облако — через ~4 сек после последней правки. На ТВ обновится само (проверка каждые 10 секунд; возможна задержка сети/CDN).</div>
-                <button onClick={doPush} className="px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-900 font-bold hover:bg-emerald-400">Сохранить</button>
+                <div className="text-sm min-w-0 space-y-2">
+                  <p className="text-zinc-400">Черновик и публикация на ТВ — разные состояния. Успешная отправка подтверждается отдельным зелёным сообщением ниже.</p>
+                  <div aria-live="polite" className="break-words">
+                    {!hasToken() ? <p className="text-amber-200 font-semibold">Не отправлено на ТВ: публикация не подключена.</p>
+                      : cloud.s === 'err' ? <div role="alert" className="text-red-300"><b>Не опубликовано.</b> {cloud.msg}<br /><button onClick={() => setShowCloudPanel(true)} className="underline mt-2">Проверить или заменить подключение</button></div>
+                      : cloud.s === 'push' ? <p className="text-sky-200">Отправляю на ТВ… Дождитесь подтверждения.</p>
+                      : cloud.s === 'queued' ? <p className="text-amber-200">Есть правки, ожидающие отправки на ТВ.</p>
+                      : cloud.s === 'check' ? <p>Проверяю облачную версию…</p>
+                      : <p className="text-emerald-200">{connectMsg.startsWith('✓ Записано') ? connectMsg : 'Прочитана опубликованная версия меню. Новые правки потребуют публикации.'}</p>}
+                  </div>
+                </div>
+                <button onClick={saveToTv} disabled={!ready || cloud.s === 'push'} className="shrink-0 px-5 py-2.5 rounded-xl bg-emerald-500 text-zinc-900 font-bold hover:bg-emerald-400 disabled:opacity-50">{cloud.s === 'push' ? 'Отправляю…' : 'Сохранить'}</button>
               </div>
             </>
           )}
