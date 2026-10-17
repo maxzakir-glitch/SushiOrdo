@@ -16,18 +16,19 @@ html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#
 button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #999;background:#303030;color:#fff;border-radius:4px;padding:5px 9px;margin-left:4px;cursor:pointer}
 #wake{position:absolute;right:8px;bottom:8px;z-index:12;background:#222;color:#fff;opacity:.6}
 #links{position:absolute;left:12px;bottom:10px;z-index:11;background:#111;padding:8px}#links a{color:#fff;margin-right:12px}
+#controls,#wake,#links{display:none}
 </style>
 </head>
 <body>
 <div id="stage"><div id="media"></div><div id="items"></div></div>
-<div id="bar"><span id="controls"><button id="prev" type="button" aria-label="Предыдущий лист">&#9664;</button><button id="next" type="button" aria-label="Следующий лист">&#9654;</button><button id="refresh" type="button">Обновить меню</button><button id="full" type="button">На весь экран</button></span><span id="label">Суши ORDO — ТВ-плеер совместимости 1.0</span><span id="message">Загружаю меню. Если эта надпись не меняется, пришлите фото экрана и модель телевизора.</span></div>
+<div id="bar"><span id="controls"><button id="prev" type="button" aria-label="Предыдущий лист">&#9664;</button><button id="next" type="button" aria-label="Следующий лист">&#9654;</button><button id="refresh" type="button">Обновить меню</button><button id="full" type="button">На весь экран</button></span><span id="label">Суши ORDO — ТВ-плеер совместимости 1.1</span><span id="message">Загружаю меню. Если эта надпись не меняется, пришлите фото экрана и модель телевизора.</span></div>
 <button id="wake" type="button">Информация</button>
 <div id="links"><a href="?id=tv1">ТВ1</a><a href="?id=tv2">ТВ2</a><a href="?id=tv3">ТВ3</a><a href="?id=tv4">ТВ4</a><a href="?id=tv5">ТВ5</a><a href="?id=tv6">ТВ6</a></div>
 <noscript><div style="position:absolute;top:90px;left:20px;color:#fff;background:#900;padding:20px;z-index:30">JavaScript отключён. Включите его в настройках браузера телевизора.</div></noscript>
 <script>
 (function () {
   'use strict';
-  var VERSION = 'compat-1.0';
+  var VERSION = 'compat-1.1';
   var APP = 'sushi-ordo-v2';
   var RAW = 'https://raw.githubusercontent.com/maxzakir-glitch/SushiOrdo/refs/heads/gh-pages/';
   var CDN = 'https://cdn.jsdelivr.net/gh/maxzakir-glitch/SushiOrdo@gh-pages/';
@@ -40,6 +41,7 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
   var label = document.getElementById('label');
   var links = document.getElementById('links');
   var match = /(?:^|[?&])id=([^&]+)/.exec(location.search);
+  var debug = /(?:^|[?&])debug=1(?:&|$)/.test(location.search);
   var id = 'tv1';
   try { if (match) id = decodeURIComponent(match[1]); } catch (ignore) {}
   var envelope = null, screen = null, idx = 0, revision = '', timer = null, hideTimer = null;
@@ -52,8 +54,9 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
   }
   function show(msg, bad) {
     text(message, msg); message.style.color = bad ? '#ffb5a8' : '#d5e5ff';
-    bar.style.display = 'block'; clearTimeout(hideTimer);
-    if (!bad && screen && !networkFailed && !mediaFailed) hideTimer = setTimeout(function () { bar.style.display = 'none'; links.style.display = 'none'; }, 6500);
+    clearTimeout(hideTimer);
+    // In normal playback show only the menu. Keep fatal diagnostics if there is nothing to display.
+    bar.style.display = debug || (bad && (!screen || !screen.slides.length || mediaFailed)) ? 'block' : 'none';
   }
   function number(value, fallback) { var n = Number(value); return isFinite(n) ? n : fallback; }
   function rgba(hex, opacity) {
@@ -193,8 +196,23 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
   document.getElementById('full').onclick = fullscreen;
   document.getElementById('wake').onclick = function () { links.style.display = 'block'; updateLabel(); show(networkFailed ? 'Нет связи с источником меню.' : mediaFailed ? 'Не удалось загрузить фото или видео текущего листа.' : 'Меню: ' + (envelope ? envelope.updatedAt : 'ещё не загружено') + ' | ' + VERSION, networkFailed || mediaFailed); };
   document.onkeydown = function (event) { var e = event || window.event; if (e.keyCode === 39) advance(1); if (e.keyCode === 37) advance(-1); if (e.keyCode === 13 || e.keyCode === 70) fullscreen(); };
+  if (debug) {
+    document.getElementById('controls').style.display = 'inline';
+    document.getElementById('wake').style.display = 'block';
+    links.style.display = 'block';
+  } else {
+    document.body.style.cursor = 'none';
+    // A real click/tap supplies the user gesture required by fullscreen APIs on TV browsers.
+    document.onclick = function () { fullscreen(); };
+  }
   window.onresize = layout;
-  if (window.addEventListener) window.addEventListener('online', poll, false);
+  if (window.addEventListener) {
+    window.addEventListener('online', poll, false);
+    document.addEventListener('fullscreenchange', layout, false);
+    document.addEventListener('webkitfullscreenchange', layout, false);
+    document.addEventListener('mozfullscreenchange', layout, false);
+    document.addEventListener('MSFullscreenChange', layout, false);
+  }
   layout(); updateLabel();
   try { var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); if (cached) accept(cached); } catch (ignore) {}
   poll(); setInterval(poll, 10000);
