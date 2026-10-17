@@ -37,7 +37,7 @@ function normalizeItem(raw, i) {
   };
 }
 
-const RAW_DEFAULT = { screens: Array.from({ length: 6 }, (_, i) => ({ id: 'tv' + (i + 1), name: 'Суши ORDO — ТВ ' + (i + 1), slides: [{ id: 'ordo-slide-' + (i + 1), type: 'image', bg: PLACEHOLDER, duration: 10, transition: 'fade', items: [] }] })) };
+const RAW_DEFAULT = { screens: Array.from({ length: 6 }, (_, i) => ({ id: 'tv' + (i + 1), name: 'Суши ORDO — ТВ ' + (i + 1), slides: [{ id: 'ordo-slide-' + (i + 1), type: 'image', bg: PLACEHOLDER, duration: 25, transition: 'fade', items: [] }] })) };
 
 export function normalizeStore(raw) {
   if (!raw || !raw.screens) return normalizeStore(RAW_DEFAULT);
@@ -48,7 +48,7 @@ export function normalizeStore(raw) {
       id: sl.id,
       type: sl.type || 'image',
       bg: sl.bg,
-      duration: sl.duration || 7,
+      duration: sl.duration || 25,
       transition: sl.transition || 'fade',
       items: (sl.items || []).map((it, idx) => normalizeItem(it, idx)),
     })),

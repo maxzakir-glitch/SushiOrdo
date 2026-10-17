@@ -12,7 +12,7 @@
             "id": "ordo-slide-1",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }
@@ -26,7 +26,7 @@
             "id": "ordo-slide-2",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }
@@ -40,7 +40,7 @@
             "id": "ordo-slide-3",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }
@@ -54,7 +54,7 @@
             "id": "ordo-slide-4",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }
@@ -68,7 +68,7 @@
             "id": "ordo-slide-5",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }
@@ -82,7 +82,7 @@
             "id": "ordo-slide-6",
             "type": "image",
             "bg": "/SushiOrdo/placeholder.svg",
-            "duration": 10,
+            "duration": 25,
             "transition": "fade",
             "items": []
           }

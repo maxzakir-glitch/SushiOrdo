@@ -228,7 +228,7 @@ export default function Admin() {
           <div>
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xs font-semibold tracking-widest text-zinc-400 uppercase">Экраны</h2>
-              <button onClick={() => updateStore((d) => { let n = 1; while (d.screens.some(s => s.id === 'tv' + n)) n++; const id = 'tv' + n; d.screens.push({ id, name: `Экран ${d.screens.length + 1}`, slides: [{ id: uid(), type: 'image', bg: PLACEHOLDER, duration: 7, transition: 'fade', items: [{ ...createEmptyItem(), x: 6, y: 68, w: 52 }] }] }); })} className="text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700">+ Экран</button>
+              <button onClick={() => updateStore((d) => { let n = 1; while (d.screens.some(s => s.id === 'tv' + n)) n++; const id = 'tv' + n; d.screens.push({ id, name: `Экран ${d.screens.length + 1}`, slides: [{ id: uid(), type: 'image', bg: PLACEHOLDER, duration: 25, transition: 'fade', items: [{ ...createEmptyItem(), x: 6, y: 68, w: 52 }] }] }); })} className="text-xs px-2 py-1 rounded-lg bg-zinc-800 border border-zinc-700 hover:bg-zinc-700">+ Экран</button>
             </div>
             <div className="flex flex-col gap-2">
               {store.screens.map((s) => (
@@ -249,7 +249,7 @@ export default function Admin() {
             <div className="flex-1 min-h-0 flex flex-col">
               <div className="flex items-center justify-between mb-2">
                 <h2 className="text-xs font-semibold tracking-widest text-zinc-400 uppercase">Листы экрана</h2>
-                <button onClick={() => updateStore((d) => { const sc = d.screens.find((x) => x.id === activeScreenId); const ns = { id: uid(), type: 'image', bg: PLACEHOLDER, duration: 7, transition: 'fade', items: [{ ...createEmptyItem(), x: 6, y: 48, w: 48 }] }; sc.slides.push(ns); setActiveSlideId(ns.id); setSelectedId(ns.items[0].id); })} className="text-xs px-2 py-1 rounded-lg bg-white text-zinc-900 font-semibold hover:bg-zinc-100">+ Лист</button>
+                <button onClick={() => updateStore((d) => { const sc = d.screens.find((x) => x.id === activeScreenId); const ns = { id: uid(), type: 'image', bg: PLACEHOLDER, duration: 25, transition: 'fade', items: [{ ...createEmptyItem(), x: 6, y: 48, w: 48 }] }; sc.slides.push(ns); setActiveSlideId(ns.id); setSelectedId(ns.items[0].id); })} className="text-xs px-2 py-1 rounded-lg bg-white text-zinc-900 font-semibold hover:bg-zinc-100">+ Лист</button>
               </div>
               <div className="flex flex-col gap-2 overflow-auto pr-1">
                 {screen.slides.map((sl, i) => (
@@ -349,7 +349,7 @@ export default function Admin() {
                     </label>
                     <label className="flex flex-col gap-1.5">
                       <span className="text-xs tracking-widest uppercase text-zinc-400">Длительность (сек)</span>
-                      <input type="number" min={2} max={60} value={slide.duration} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).duration = Number(e.target.value) || 7; })} className="px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700" />
+                      <input type="number" min={2} max={60} value={slide.duration} onChange={(e) => updateStore((d) => { d.screens.find((x) => x.id === activeScreenId).slides.find((x) => x.id === activeSlideId).duration = Number(e.target.value) || 25; })} className="px-3 py-2.5 rounded-xl bg-zinc-800 border border-zinc-700" />
                     </label>
                   </div>
                   <label className="flex flex-col gap-1.5">
