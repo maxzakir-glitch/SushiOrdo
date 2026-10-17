@@ -22,14 +22,14 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
 </head>
 <body>
 <div id="stage"><div class="slide-frame"><div id="media" class="media-layer"></div><div id="items" class="items-layer"></div></div></div>
-<div id="bar"><span id="controls"><button id="prev" type="button" aria-label="Предыдущий лист">&#9664;</button><button id="next" type="button" aria-label="Следующий лист">&#9654;</button><button id="refresh" type="button">Обновить меню</button><button id="full" type="button">На весь экран</button></span><span id="label">Суши ORDO — ТВ-плеер совместимости 1.2</span><span id="message">Загружаю меню. Если эта надпись не меняется, пришлите фото экрана и модель телевизора.</span></div>
+<div id="bar"><span id="controls"><button id="prev" type="button" aria-label="Предыдущий лист">&#9664;</button><button id="next" type="button" aria-label="Следующий лист">&#9654;</button><button id="refresh" type="button">Обновить меню</button><button id="full" type="button">На весь экран</button></span><span id="label">Суши ORDO — ТВ-плеер совместимости 1.3</span><span id="message">Загружаю меню. Если эта надпись не меняется, пришлите фото экрана и модель телевизора.</span></div>
 <button id="wake" type="button">Информация</button>
 <div id="links"><a href="?id=tv1">ТВ1</a><a href="?id=tv2">ТВ2</a><a href="?id=tv3">ТВ3</a><a href="?id=tv4">ТВ4</a><a href="?id=tv5">ТВ5</a><a href="?id=tv6">ТВ6</a></div>
 <noscript><div style="position:absolute;top:90px;left:20px;color:#fff;background:#900;padding:20px;z-index:30">JavaScript отключён. Включите его в настройках браузера телевизора.</div></noscript>
 <script>
 (function () {
   'use strict';
-  var VERSION = 'compat-1.2';
+  var VERSION = 'compat-1.3';
   var APP = 'sushi-ordo-v2';
   var RAW = 'https://raw.githubusercontent.com/maxzakir-glitch/SushiOrdo/refs/heads/gh-pages/';
   var CDN = 'https://cdn.jsdelivr.net/gh/maxzakir-glitch/SushiOrdo@gh-pages/';
@@ -47,7 +47,10 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
   try { if (match) id = decodeURIComponent(match[1]); } catch (ignore) {}
   var envelope = null, screen = null, idx = 0, revision = '', timer = null, hideTimer = null;
   var currentFrame = stage.firstChild, fading = null, framePending = false, preloadedImage = null;
-  var FADE_MS = 1000, slideShownAt = 0;
+  var FADE_MS = 1350, slideShownAt = 0, ambientTimer = null;
+  var screenPhase = Math.max(0, (parseInt(String(id).replace(/[^0-9]/g, ''), 10) || 1) - 1);
+  var effectNames = ['dissolve', 'reveal-left', 'lens-in', 'reveal-up', 'glide-left', 'center-open', 'lens-out', 'reveal-right', 'glide-up', 'reveal-down', 'glide-right', 'glide-down'];
+  var effectLabels = ['Кинорастворение', 'Раскрытие слева', 'Мягкое приближение', 'Раскрытие снизу', 'Воздушный сдвиг влево', 'Раскрытие из центра', 'Глубина и отдаление', 'Раскрытие справа', 'Воздушный подъём', 'Раскрытие сверху', 'Воздушный сдвиг вправо', 'Воздушное опускание'];
   var busy = false, width = 1920, height = 1080, scale = 1, mediaNode = null;
   var mediaFailed = false, networkFailed = false, renderGeneration = 0, destroyed = false, mediaTimeout = null;
 
@@ -69,7 +72,7 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
     return 'rgba(' + parseInt(h.slice(0, 2), 16) + ',' + parseInt(h.slice(2, 4), 16) + ',' + parseInt(h.slice(4, 6), 16) + ',' + opacity + ')';
   }
   function updateLabel() {
-    text(label, 'Суши ORDO — ' + id.toUpperCase() + ' | ' + (screen && screen.slides.length ? 'Лист ' + (idx + 1) + ' / ' + screen.slides.length : 'Нет данных') + ' | ' + VERSION);
+    text(label, 'Суши ORDO — ' + id.toUpperCase() + ' | ' + (screen && screen.slides.length ? 'Лист ' + (idx + 1) + ' / ' + screen.slides.length : 'Нет данных') + ' | ' + VERSION + (debug ? ' | ' + effectLabels[effectIndex(idx)] : ''));
   }
   function alternate(url) { return url.indexOf(RAW) === 0 ? CDN + url.slice(RAW.length) : ''; }
   function cover(target) {
@@ -134,13 +137,65 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
     image.onerror = function () { var backup = alternate(source); if (!retried && backup) { retried = true; image.src = backup; } };
     preloadedImage = image; image.src = source;
   }
+  // A coprime stride gives each of up to 12 slides a different effect.
+  // Different TV offsets also prevent the same-position slides from sharing an effect.
+  function effectIndex(index) { return (screenPhase * 2 + index * 5) % effectNames.length; }
+  function smooth(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+  function framePose(frame, x, y, zoom) {
+    var value = 'translate(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px) scale(' + zoom.toFixed(5) + ')';
+    if ('transform' in frame.style || 'webkitTransform' in frame.style || 'msTransform' in frame.style) {
+      frame.style.transform = value; frame.style.webkitTransform = value; frame.style.msTransform = value;
+    } else { frame.style.left = x + 'px'; frame.style.top = y + 'px'; }
+  }
+  function resetFrame(frame) {
+    if (!frame) return;
+    frame.style.opacity = '1'; frame.style.clip = 'auto'; frame.style.left = '0px'; frame.style.top = '0px';
+    frame.style.transform = 'none'; frame.style.webkitTransform = 'none'; frame.style.msTransform = 'none';
+  }
+  function rectangle(frame, top, right, bottom, left) {
+    frame.style.clip = 'rect(' + Math.round(top) + 'px,' + Math.round(right) + 'px,' + Math.round(bottom) + 'px,' + Math.round(left) + 'px)';
+  }
+  function transitionPose(frame, outgoing, progress) {
+    var e = smooth(progress), rest = 1 - e, effect = frame._effect;
+    frame.style.opacity = String(e);
+    if (effect === 'reveal-left') { frame.style.opacity = '1'; rectangle(frame, 0, width * e, height, 0); }
+    else if (effect === 'reveal-right') { frame.style.opacity = '1'; rectangle(frame, 0, width, height, width * rest); }
+    else if (effect === 'reveal-up') { frame.style.opacity = '1'; rectangle(frame, height * rest, width, height, 0); }
+    else if (effect === 'reveal-down') { frame.style.opacity = '1'; rectangle(frame, 0, width, height * e, 0); }
+    else if (effect === 'center-open') { frame.style.opacity = '1'; rectangle(frame, 0, width - width * 0.5 * rest, height, width * 0.5 * rest); }
+    else if (effect === 'glide-left') framePose(frame, width * 0.045 * rest, 0, 1);
+    else if (effect === 'glide-right') framePose(frame, -width * 0.045 * rest, 0, 1);
+    else if (effect === 'glide-up') framePose(frame, 0, height * 0.045 * rest, 1);
+    else if (effect === 'glide-down') framePose(frame, 0, -height * 0.045 * rest, 1);
+    else if (effect === 'lens-in') framePose(frame, 0, 0, 1 + 0.09 * rest);
+    else if (effect === 'lens-out') { framePose(frame, 0, 0, 1 + 0.025 * rest); if (outgoing) framePose(outgoing, 0, 0, 1 + 0.055 * e); }
+  }
+  function startAmbient(frame) {
+    clearInterval(ambientTimer); ambientTimer = null;
+    if (!frame || !frame._mediaNode || frame._slide.type === 'video') return;
+    var node = frame._mediaNode;
+    if (!('transform' in node.style || 'webkitTransform' in node.style || 'msTransform' in node.style)) return;
+    var vectors = [[-1,1],[1,-1],[1,1],[-1,-1],[0,1],[1,0],[0,-1],[-1,0]];
+    var seed = (screenPhase * 3 + idx) % vectors.length, direction = vectors[seed];
+    var began = new Date().getTime(), duration = Math.max(2, number(frame._slide.duration, 25)) * 1000;
+    node.style.transformOrigin = '50% 50%'; node.style.webkitTransformOrigin = '50% 50%';
+    function move() {
+      if (currentFrame !== frame || !frame.parentNode) return;
+      var t = Math.min(1, Math.max(0, (new Date().getTime() - began) / duration));
+      var zoom = seed % 2 ? 1.026 - 0.014 * t : 1.012 + 0.014 * t;
+      var x = direction[0] * width * 0.0015 * (2 * t - 1), y = direction[1] * height * 0.0015 * (2 * t - 1);
+      var value = 'translate(' + x.toFixed(2) + 'px,' + y.toFixed(2) + 'px) scale(' + zoom.toFixed(5) + ')';
+      node.style.transform = value; node.style.webkitTransform = value; node.style.msTransform = value;
+    }
+    move(); ambientTimer = setInterval(move, 80);
+  }
   function render() {
     renderGeneration++; var generation = renderGeneration;
-    clearTimeout(timer); clearTimeout(mediaTimeout); clearInterval(fading); fading = null;
+    clearTimeout(timer); clearTimeout(mediaTimeout); clearInterval(fading); fading = null; clearInterval(ambientTimer); ambientTimer = null;
     // Keep a fully drawn outgoing slide until the incoming image is decoded.
     var oldFrame = null, child = stage.firstChild;
     while (child) { if (child._ready) oldFrame = child; child = child.nextSibling; }
-    if (oldFrame) oldFrame.style.opacity = '1';
+    if (oldFrame) resetFrame(oldFrame);
     keepOnly(oldFrame);
     if (!screen || !screen.slides.length) {
       keepOnly(null); mediaNode = null; framePending = false; updateLabel(); show('На этом экране нет опубликованных листов.', true); return;
@@ -151,6 +206,7 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
     items = document.createElement('div'); items.className = 'items-layer'; items.id = 'items';
     frame.appendChild(media); frame.appendChild(items); stage.appendChild(frame);
     currentFrame = frame; frame._media = media; frame._items = items; frame._slide = screen.slides[idx];
+    frame._effect = effectNames[effectIndex(idx)]; frame.setAttribute('data-effect', frame._effect);
     framePending = true; mediaFailed = false;
     var slide = frame._slide;
     var preserveDeadline = oldFrame && oldFrame._slide && oldFrame._slide.id === slide.id && oldFrame._slide.duration === slide.duration;
@@ -159,22 +215,23 @@ button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #99
     mediaNode = node; frame._mediaNode = node;
     function finishFade() {
       if (generation !== renderGeneration) return;
-      clearInterval(fading); fading = null; frame.style.opacity = '1'; keepOnly(frame); framePending = false;
-      preloadNext(); schedule();
+      clearInterval(fading); fading = null; resetFrame(frame); keepOnly(frame); framePending = false;
+      startAmbient(frame); preloadNext(); schedule();
     }
     function loaded() {
       if (generation !== renderGeneration) return;
       clearTimeout(mediaTimeout); mediaFailed = false; cover(node);
       if (started) return; started = true; frame._ready = true; framePending = true; clearTimeout(timer);
       slideShownAt = preserveDeadline && previousShownAt ? previousShownAt : new Date().getTime();
-      if (!networkFailed) show('Меню загружено. Плавный переход, показ листа 25 секунд по умолчанию.', false);
+      if (!networkFailed) show('Меню загружено. Разные премиальные переходы, 25 секунд на лист.', false);
       if (!oldFrame) { finishFade(); return; }
       var began = new Date().getTime();
-      // ES5 opacity tween: no WebGL, modern animation APIs or CSS-transition dependency.
+      // ES5 compositor: no WebGL, blur filters, modern animation APIs or module loader.
+      transitionPose(frame, oldFrame, 0);
       fading = setInterval(function () {
         if (generation !== renderGeneration) return;
         var t = Math.min(1, (new Date().getTime() - began) / FADE_MS);
-        frame.style.opacity = String(t * t * (3 - 2 * t));
+        transitionPose(frame, oldFrame, t);
         if (t >= 1) finishFade();
       }, 40);
     }
