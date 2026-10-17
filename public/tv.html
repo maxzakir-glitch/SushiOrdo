@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Суши ORDO — совместимый ТВ-плеер</title>
+<style>
+html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;color:#fff;font-family:Arial,sans-serif}
+#stage{position:absolute;overflow:hidden;background:#101417}
+#media,#items{position:absolute;left:0;top:0;width:100%;height:100%;overflow:hidden}
+#media img,#media video{position:absolute;max-width:none}
+.item{position:absolute;box-sizing:border-box;overflow-wrap:break-word;word-wrap:break-word;border-style:solid}
+.title{font-weight:bold;line-height:1.1}.detail{line-height:1.3}.price{display:inline-block;font-weight:bold;line-height:1.1}
+#bar{position:absolute;left:0;right:0;top:0;z-index:10;background:#161616;background:rgba(0,0,0,.8);padding:8px 12px;font-size:14px;line-height:1.5}
+#message{display:block;word-wrap:break-word}#controls{float:right;margin-left:12px}
+button,a{font-family:Arial,sans-serif;font-size:14px}button{border:1px solid #999;background:#303030;color:#fff;border-radius:4px;padding:5px 9px;margin-left:4px;cursor:pointer}
+#wake{position:absolute;right:8px;bottom:8px;z-index:12;background:#222;color:#fff;opacity:.6}
+#links{position:absolute;left:12px;bottom:10px;z-index:11;background:#111;padding:8px}#links a{color:#fff;margin-right:12px}
+</style>
+</head>
+<body>
+<div id="stage"><div id="media"></div><div id="items"></div></div>
+<div id="bar"><span id="controls"><button id="prev" type="button" aria-label="Предыдущий лист">&#9664;</button><button id="next" type="button" aria-label="Следующий лист">&#9654;</button><button id="refresh" type="button">Обновить меню</button><button id="full" type="button">На весь экран</button></span><span id="label">Суши ORDO — ТВ-плеер совместимости 1.0</span><span id="message">Загружаю меню. Если эта надпись не меняется, пришлите фото экрана и модель телевизора.</span></div>
+<button id="wake" type="button">Информация</button>
+<div id="links"><a href="?id=tv1">ТВ1</a><a href="?id=tv2">ТВ2</a><a href="?id=tv3">ТВ3</a><a href="?id=tv4">ТВ4</a><a href="?id=tv5">ТВ5</a><a href="?id=tv6">ТВ6</a></div>
+<noscript><div style="position:absolute;top:90px;left:20px;color:#fff;background:#900;padding:20px;z-index:30">JavaScript отключён. Включите его в настройках браузера телевизора.</div></noscript>
+<script>
+(function () {
+  'use strict';
+  var VERSION = 'compat-1.0';
+  var APP = 'sushi-ordo-v2';
+  var RAW = 'https://raw.githubusercontent.com/maxzakir-glitch/SushiOrdo/refs/heads/gh-pages/';
+  var CDN = 'https://cdn.jsdelivr.net/gh/maxzakir-glitch/SushiOrdo@gh-pages/';
+  var cacheKey = APP + ':compat-published';
+  var stage = document.getElementById('stage');
+  var media = document.getElementById('media');
+  var items = document.getElementById('items');
+  var bar = document.getElementById('bar');
+  var message = document.getElementById('message');
+  var label = document.getElementById('label');
+  var links = document.getElementById('links');
+  var match = /(?:^|[?&])id=([^&]+)/.exec(location.search);
+  var id = 'tv1';
+  try { if (match) id = decodeURIComponent(match[1]); } catch (ignore) {}
+  var envelope = null, screen = null, idx = 0, revision = '', timer = null, hideTimer = null;
+  var busy = false, width = 1920, height = 1080, scale = 1, mediaNode = null;
+  var mediaFailed = false, networkFailed = false, renderGeneration = 0, destroyed = false, mediaTimeout = null;
+
+  function text(node, value) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+    node.appendChild(document.createTextNode(String(value == null ? '' : value)));
+  }
+  function show(msg, bad) {
+    text(message, msg); message.style.color = bad ? '#ffb5a8' : '#d5e5ff';
+    bar.style.display = 'block'; clearTimeout(hideTimer);
+    if (!bad && screen && !networkFailed && !mediaFailed) hideTimer = setTimeout(function () { bar.style.display = 'none'; links.style.display = 'none'; }, 6500);
+  }
+  function number(value, fallback) { var n = Number(value); return isFinite(n) ? n : fallback; }
+  function rgba(hex, opacity) {
+    var h = String(hex || '#ffffff').replace('#', '');
+    if (h.length === 3) h = h.charAt(0) + h.charAt(0) + h.charAt(1) + h.charAt(1) + h.charAt(2) + h.charAt(2);
+    if (!/^[0-9a-fA-F]{6}$/.test(h)) h = 'ffffff';
+    return 'rgba(' + parseInt(h.slice(0, 2), 16) + ',' + parseInt(h.slice(2, 4), 16) + ',' + parseInt(h.slice(4, 6), 16) + ',' + opacity + ')';
+  }
+  function updateLabel() {
+    text(label, 'Суши ORDO — ' + id.toUpperCase() + ' | ' + (screen && screen.slides.length ? 'Лист ' + (idx + 1) + ' / ' + screen.slides.length : 'Нет данных') + ' | ' + VERSION);
+  }
+  function alternate(url) { return url.indexOf(RAW) === 0 ? CDN + url.slice(RAW.length) : ''; }
+  function cover() {
+    if (!mediaNode) return;
+    var w = mediaNode.naturalWidth || mediaNode.videoWidth || width;
+    var h = mediaNode.naturalHeight || mediaNode.videoHeight || height;
+    var factor = Math.max(width / w, height / h);
+    mediaNode.style.width = Math.ceil(w * factor) + 'px'; mediaNode.style.height = Math.ceil(h * factor) + 'px';
+    mediaNode.style.left = Math.round((width - w * factor) / 2) + 'px'; mediaNode.style.top = Math.round((height - h * factor) / 2) + 'px';
+  }
+  function drawItems(slide) {
+    while (items.firstChild) items.removeChild(items.firstChild);
+    var list = slide.items || [], i, item, style, box, title, detail, price, pad;
+    for (i = 0; i < list.length; i++) {
+      item = list[i]; style = item.style || {}; box = document.createElement('div'); box.className = 'item';
+      box.style.left = number(item.x, 0) + '%'; box.style.top = number(item.y, 0) + '%'; box.style.width = number(item.w, 30) + '%';
+      box.style.fontSize = (22 * scale) + 'px'; box.style.padding = (16 * scale) + 'px ' + (20 * scale) + 'px';
+      box.style.backgroundColor = rgba(style.bg, number(style.bgOpacity, 0.82)); box.style.color = style.textColor || '#18181b';
+      box.style.borderColor = rgba(style.bg, number(style.borderOpacity, 0.5)); box.style.borderWidth = Math.max(0.5, scale) + 'px';
+      box.style.borderRadius = (number(style.radius, 20) * scale) + 'px';
+      if (style.shadow) box.style.boxShadow = '0 8px 32px rgba(0,0,0,.18)';
+      title = document.createElement('div'); title.className = 'title'; text(title, item.title || item.name || ''); box.appendChild(title);
+      if (item.desc) { detail = document.createElement('div'); detail.className = 'detail'; detail.style.fontSize = '0.62em'; detail.style.marginTop = (6 * scale) + 'px'; text(detail, item.desc); box.appendChild(detail); }
+      if (item.weight) { detail = document.createElement('div'); detail.className = 'detail'; detail.style.fontSize = '0.58em'; detail.style.marginTop = (6 * scale) + 'px'; text(detail, item.weight); box.appendChild(detail); }
+      if (item.price !== '' && item.price != null) {
+        price = document.createElement('span'); price.className = 'price'; text(price, item.price);
+        price.style.backgroundColor = style.priceBg || '#18181b'; price.style.color = style.priceColor || '#fff'; price.style.fontSize = '0.82em';
+        price.style.borderRadius = (Math.max(10, number(style.radius, 20) - 8) * scale) + 'px';
+        price.style.padding = (6 * scale) + 'px ' + (12 * scale) + 'px'; price.style.marginTop = (10 * scale) + 'px';
+        pad = document.createElement('div'); pad.appendChild(price); box.appendChild(pad);
+      }
+      items.appendChild(box);
+    }
+  }
+  function layout() {
+    var w = window.innerWidth || document.documentElement.clientWidth || 1920;
+    var h = window.innerHeight || document.documentElement.clientHeight || 1080;
+    width = Math.min(w, h * 16 / 9); height = width * 9 / 16; scale = width / 1920;
+    stage.style.width = Math.round(width) + 'px'; stage.style.height = Math.round(height) + 'px';
+    stage.style.left = Math.round((w - width) / 2) + 'px'; stage.style.top = Math.round((h - height) / 2) + 'px';
+    cover(); if (screen && screen.slides[idx]) drawItems(screen.slides[idx]);
+  }
+  function render() {
+    renderGeneration++; var generation = renderGeneration; clearTimeout(mediaTimeout);
+    while (items.firstChild) items.removeChild(items.firstChild);
+    while (media.firstChild) { try { if (media.firstChild.pause) media.firstChild.pause(); } catch (ignore) {} media.removeChild(media.firstChild); }
+    mediaNode = null; mediaFailed = false;
+    if (!screen || !screen.slides.length) { updateLabel(); show('На этом экране нет опубликованных листов.', true); return; }
+    var slide = screen.slides[idx], source = String(slide.bg || ''), node = document.createElement(slide.type === 'video' ? 'video' : 'img'), retried = false;
+    mediaNode = node;
+    function loaded() {
+      if (generation !== renderGeneration) return;
+      clearTimeout(mediaTimeout); mediaFailed = false; cover();
+      if (!networkFailed) show('Меню загружено. Листы переключаются автоматически.', false);
+    }
+    node.onerror = function () {
+      if (generation !== renderGeneration) return;
+      var other = alternate(source);
+      if (!retried && other) { retried = true; node.src = other; return; }
+      clearTimeout(mediaTimeout); mediaFailed = true; show('Лист ' + (idx + 1) + ': ' + (slide.type === 'video' ? 'видео не загрузилось. Для ТВ используйте MP4 H.264.' : 'фото не загрузилось. Проверьте интернет на ТВ.') + ' Сделайте фото этой строки.', true);
+    };
+    if (slide.type === 'video') {
+      node.muted = true; node.autoplay = true; node.loop = true; node.setAttribute('muted', ''); node.setAttribute('playsinline', '');
+      node.onloadedmetadata = loaded;
+      node.oncanplay = function () { try { var p = node.play(); if (p && typeof p['catch'] === 'function') p['catch'](function () { show('Для запуска видео нажмите на экран или Enter.', true); }); } catch (ignore) {} };
+    } else { node.alt = ''; node.onload = loaded; }
+    mediaTimeout = setTimeout(function () { if (generation === renderGeneration) { mediaFailed = true; show('Фото или видео загружается слишком долго. Проверьте интернет на ТВ. Лист ' + (idx + 1) + '.', true); } }, 15000);
+    media.appendChild(node); node.src = source; cover(); drawItems(slide); updateLabel();
+    if (slide.type !== 'video' && node.complete && node.naturalWidth) loaded();
+  }
+  function schedule() {
+    clearTimeout(timer); if (!screen || screen.slides.length < 2) return;
+    timer = setTimeout(function () { advance(1); }, Math.max(2, number(screen.slides[idx].duration, 10)) * 1000);
+  }
+  function advance(delta) {
+    if (!screen || !screen.slides.length) return;
+    idx = (idx + delta + screen.slides.length) % screen.slides.length; render(); schedule();
+  }
+  function accept(data) {
+    if (!data || data.appId !== APP || !data.revision || !data.data || Object.prototype.toString.call(data.data.screens) !== '[object Array]') throw new Error('Некорректный файл меню');
+    var found = null, i;
+    for (i = 0; i < data.data.screens.length; i++) if (data.data.screens[i].id === id) found = data.data.screens[i];
+    if (!found || Object.prototype.toString.call(found.slides) !== '[object Array]') throw new Error('Экран ' + id + ' отсутствует. Выберите ТВ1–ТВ6 внизу.');
+    var wasOffline = networkFailed; networkFailed = false;
+    if (data.revision === revision) { if (wasOffline && !mediaFailed) show('Связь с меню восстановлена.', false); return; }
+    var old = screen && screen.slides[idx], oldCount = screen ? screen.slides.length : 0, nextIdx = -1;
+    if (old) for (i = 0; i < found.slides.length; i++) if (found.slides[i].id === old.id) nextIdx = i;
+    screen = found; idx = nextIdx >= 0 ? nextIdx : Math.min(idx, Math.max(0, found.slides.length - 1));
+    envelope = data; revision = data.revision;
+    try { localStorage.setItem(cacheKey, JSON.stringify(data)); } catch (ignore) {}
+    var current = screen.slides[idx];
+    if (!old || JSON.stringify(old) !== JSON.stringify(current)) render(); else updateLabel();
+    if (!old || !current || old.id !== current.id || old.duration !== current.duration || (oldCount < 2) !== (screen.slides.length < 2)) schedule();
+    if (!mediaFailed) show('Меню обновлено. Сохранения не сбрасывают перелистывание.', false);
+  }
+  function get(url, done) {
+    var xhr = new XMLHttpRequest(), ended = false;
+    var timeout = setTimeout(function () { finish(new Error('timeout')); try { xhr.abort(); } catch (ignore) {} }, 12000);
+    function finish(err, value) { if (ended) return; ended = true; clearTimeout(timeout); done(err, value); }
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || ended) return;
+      if (xhr.status >= 200 && xhr.status < 300) { try { finish(null, JSON.parse(xhr.responseText)); } catch (e) { finish(e); } }
+      else finish(new Error('HTTP ' + xhr.status));
+    };
+    xhr.onerror = function () { finish(new Error('network')); };
+    try { xhr.open('GET', url + '?t=' + new Date().getTime(), true); xhr.send(null); } catch (e) { finish(e); }
+  }
+  function poll() {
+    if (busy || destroyed) return; busy = true;
+    get(RAW + 'data/menu.json', function (err, data) {
+      if (!err) { try { accept(data); busy = false; return; } catch (e) { err = e; } }
+      get(CDN + 'data/menu.json', function (backupError, backup) {
+        busy = false;
+        if (!backupError) { try { accept(backup); return; } catch (e) { backupError = e; } }
+        networkFailed = true; show('Не удалось загрузить меню с обоих адресов. ' + (backupError && backupError.message ? backupError.message : '') + ' Проверьте интернет, дату и время на ТВ. Последняя загруженная версия остаётся на экране.', true);
+      });
+    });
+  }
+  function fullscreen() {
+    var element = document.documentElement;
+    try { var fn = element.requestFullscreen || element.webkitRequestFullscreen || element.webkitRequestFullScreen || element.mozRequestFullScreen || element.msRequestFullscreen; if (fn) { var result = fn.call(element); if (result && result['catch']) result['catch'](function () {}); } } catch (ignore) {}
+    try { if (mediaNode && mediaNode.play) { var p = mediaNode.play(); if (p && p['catch']) p['catch'](function () {}); } } catch (ignore) {}
+  }
+  document.getElementById('prev').onclick = function () { advance(-1); };
+  document.getElementById('next').onclick = function () { advance(1); };
+  document.getElementById('refresh').onclick = function () { show('Проверяю опубликованное меню…', false); poll(); };
+  document.getElementById('full').onclick = fullscreen;
+  document.getElementById('wake').onclick = function () { links.style.display = 'block'; updateLabel(); show(networkFailed ? 'Нет связи с источником меню.' : mediaFailed ? 'Не удалось загрузить фото или видео текущего листа.' : 'Меню: ' + (envelope ? envelope.updatedAt : 'ещё не загружено') + ' | ' + VERSION, networkFailed || mediaFailed); };
+  document.onkeydown = function (event) { var e = event || window.event; if (e.keyCode === 39) advance(1); if (e.keyCode === 37) advance(-1); if (e.keyCode === 13 || e.keyCode === 70) fullscreen(); };
+  window.onresize = layout;
+  if (window.addEventListener) window.addEventListener('online', poll, false);
+  layout(); updateLabel();
+  try { var cached = JSON.parse(localStorage.getItem(cacheKey) || 'null'); if (cached) accept(cached); } catch (ignore) {}
+  poll(); setInterval(poll, 10000);
+}());
+</script>
+</body>
+</html>
